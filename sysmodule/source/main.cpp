@@ -5,18 +5,6 @@
 
 namespace amnhacNX {
 
-enum class AudioDriverState {
-    Idle,
-    Playing,
-    Paused,
-    Error
-};
-
-struct Track {
-    std::string path;
-    std::string title;
-};
-
 struct SystemConfig {
     std::string musicDirectory = "/switch/amnhacNX/music/";
     std::string settingsFile = "/switch/amnhacNX/settings.ini";
@@ -27,7 +15,7 @@ struct SystemConfig {
     bool overlayEnabled = true;
 };
 
-static void printSystemInfo(const SystemConfig& cfg) {
+static void printInfo(const SystemConfig& cfg) {
     std::printf("amnhacNX sysmodule skeleton\n");
     std::printf("musicDir: %s\n", cfg.musicDirectory.c_str());
     std::printf("settingsFile: %s\n", cfg.settingsFile.c_str());
@@ -35,15 +23,12 @@ static void printSystemInfo(const SystemConfig& cfg) {
     std::printf("gameVolume: %.2f\n", cfg.gameVolume);
 }
 
-} // namespace amnhacNX
-
 int main() {
     consoleInit(nullptr);
 
-    amnhacNX::SystemConfig cfg;
-    amnhacNX::printSystemInfo(cfg);
-
-    std::printf("Background audio service initialized.\n");
+    SystemConfig cfg;
+    printInfo(cfg);
+    std::printf("Background audio service initialized\n");
     std::printf("Overlay: enabled\n");
 
     while (appletMainLoop()) {
@@ -60,3 +45,5 @@ int main() {
     consoleExit(nullptr);
     return 0;
 }
+
+} // namespace amnhacNX
