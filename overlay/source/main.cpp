@@ -1,96 +1,156 @@
+#define TESLA_INIT_IMPL
+#include <tesla.hpp>
 #include <switch.h>
+
+#include <algorithm>
+#include <array>
+#include <cctype>
 #include <cstdio>
-#include <dirent.h>
+#include <cstring>
+#include <memory>
 #include <string>
 #include <vector>
 
-#include "settings.hpp"
+namespace {
 
-namespace amnhacNX {
+constexpr const char* kMusicDirectory = "/switch/amnhacNX/music";
+constexpr std::size_t kMaxTracks = 512;
 
-static void printHeader(const Settings& settings) {
-    std::printf("===================================\n");
-    std::printf("amnhacNX overlay stub\n");
-    std::printf("Language: %s\n", settings.language == Language::Vietnamese ? "Tiếng Việt" : "English");
-    std::printf("Music volume: %.2f\n", settings.musicVolume);
-    std::printf("Game volume: %.2f\n", settings.gameVolume);
-    std::printf("===================================\n\n");
+FsFileSystem g_sd{};
+bool g_sdReady = false;
+bool g_vietnamese = false;
+std::string g_selectedTrack;
+std::vector<std::string> g_tracks;
+
+const char* text(const char* english, const char* vietnamese) {
+    return g_vietnamese ? vietnamese : english;
 }
 
-static std::vector<Track> scanMusic(const std::string& directory) {
-    return listMusicTracks(directory);
+bool hasSupportedExtension(const char* filename) {
+    const std::string name(filename);
+    const std::size_t dot = name.find_last_of('.');
+    if (dot == std::string::npos) return false;
+
+    std::string extension = name.substr(dot);
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+
+    return extension == ".mp3" || extension == ".flac" || extension == ".wav" ||
+           extension == ".wave" || extension == ".ogg";
 }
 
-int main() {
-    consoleInit(nullptr);
+void scanMusic() {
+    g_tracks.clear();
+    if (!g_sdReady) return;
 
-    Settings settings;
-    std::string settingsPath = "/switch/amnhacNX/settings.ini";
-    std::string musicDirectory = "/switch/amnhacNX/music/";
-
-    loadSettings(settingsPath, settings);
-    std::vector<Track> tracks = scanMusic(musicDirectory);
-
-    printHeader(settings);
-    std::printf("Found tracks: %zu\n", tracks.size());
-    for (std::size_t i = 0; i < tracks.size() && i < 10; ++i) {
-        std::printf("[%zu] %s\n", i + 1, tracks[i].title.c_str());
+    FsDir directory{};
+    if (R_FAILED(fsFsOpenDirectory(&g_sd, kMusicDirectory,
+                                   FsDirOpenMode_ReadFiles | FsDirOpenMode_NoFileSize,
+                                   &directory))) {
+        return;
     }
 
-    std::printf("\nControls:\n");
-    std::printf("A = Play/Pause\n");
-    std::printf("DPad Up/Down = Change selection\n");
-    std::printf("X = Toggle language\n");
-    std::printf("Plus = Exit\n");
+    std::array<FsDirectoryEntry, 32> entries{};
+    s64 count = 0;
+    while (g_tracks.size() < kMaxTracks &&
+           R_SUCCEEDED(fsDirRead(&directory, &count, entries.size(), entries.data())) && count > 0) {
+        for (s64 i = 0; i < count && g_tracks.size() < kMaxTracks; ++i) {
+            const FsDirectoryEntry& entry = entries[static_cast<std::size_t>(i)];
+            if (entry.type == FsDirEntryType_File && hasSupportedExtension(entry.name)) {
+                g_tracks.emplace_back(entry.name);
+            }
+        }
+    }
+    fsDirClose(&directory);
 
-    std::size_t selectedIndex = 0;
-    bool playing = false;
+    std::sort(g_tracks.begin(), g_tracks.end(), [](const std::string& lhs, const std::string& rhs) {
+        return strcasecmp(lhs.c_str(), rhs.c_str()) < 0;
+    });
+}
 
-    while (appletMainLoop()) {
-        hidScanInput();
-        u32 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+class MainGui final : public tsl::Gui {
+public:
+    tsl::elm::Element* createUI() override {
+        auto* list = new tsl::elm::List();
+        list->addItem(new tsl::elm::CategoryHeader("amnhacNX - Tesla prototype"));
+        list->addItem(new tsl::elm::CategoryHeader(text("SD music folder", "Thư mục nhạc trên SD")));
+        list->addItem(new tsl::elm::CategoryHeader(kMusicDirectory));
 
-        if (kDown & KEY_UP) {
-            if (selectedIndex > 0) {
-                --selectedIndex;
+        if (!g_sdReady) {
+            list->addItem(new tsl::elm::ListItem(text("Could not open SD card", "Không mở được thẻ SD")));
+        } else if (g_tracks.empty()) {
+            list->addItem(new tsl::elm::ListItem(text("No supported tracks found", "Không tìm thấy bài nhạc phù hợp")));
+        } else {
+            list->addItem(new tsl::elm::CategoryHeader(text("Tracks (A: select)", "Danh sách (A: chọn)")));
+            for (const std::string& track : g_tracks) {
+                auto* item = new tsl::elm::ListItem(track, track == g_selectedTrack ? "Selected" : "");
+                item->setClickListener([track](u64 keys) {
+                    if (keys & HidNpadButton_A) {
+                        g_selectedTrack = track;
+                        tsl::changeTo<MainGui>();
+                        return true;
+                    }
+                    return false;
+                });
+                list->addItem(item);
             }
         }
 
-        if (kDown & KEY_DOWN) {
-            if (selectedIndex + 1 < tracks.size()) {
-                ++selectedIndex;
+        auto* refresh = new tsl::elm::ListItem(text("Rescan SD card", "Quét lại thẻ SD"));
+        refresh->setClickListener([](u64 keys) {
+            if (keys & HidNpadButton_A) {
+                scanMusic();
+                tsl::changeTo<MainGui>();
+                return true;
             }
+            return false;
+        });
+        list->addItem(refresh);
+
+        auto* language = new tsl::elm::ListItem(
+            text("Language: English (A to switch)", "Ngôn ngữ: Tiếng Việt (A để đổi)"));
+        language->setClickListener([](u64 keys) {
+            if (keys & HidNpadButton_A) {
+                g_vietnamese = !g_vietnamese;
+                tsl::changeTo<MainGui>();
+                return true;
+            }
+            return false;
+        });
+        list->addItem(language);
+
+        list->addItem(new tsl::elm::CategoryHeader(text("Playback is not in this prototype yet",
+                                                         "Bản thử nghiệm này chưa phát nhạc")));
+        if (!g_selectedTrack.empty()) {
+            list->addItem(new tsl::elm::ListItem(
+                text("Selected track", "Bài đã chọn"), g_selectedTrack));
         }
+        return list;
+    }
+};
 
-        if (kDown & KEY_A) {
-            playing = !playing;
-        }
-
-        if (kDown & KEY_X) {
-            settings.language = (settings.language == Language::English) ? Language::Vietnamese : Language::English;
-            saveSettings(settingsPath, settings);
-        }
-
-        if (kDown & KEY_PLUS) {
-            break;
-        }
-
-        consoleClear();
-        printHeader(settings);
-        std::printf("Now playing: %s\n", tracks.empty() ? "(none)" : tracks[selectedIndex].title.c_str());
-        std::printf("Status: %s\n", playing ? "Playing" : "Paused");
-        std::printf("Selection: %zu/%zu\n", selectedIndex + 1, tracks.size());
-        std::printf("\nControls:\n");
-        std::printf("A = Play/Pause\n");
-        std::printf("DPad Up/Down = Change selection\n");
-        std::printf("X = Toggle language\n");
-        std::printf("Plus = Exit\n");
-
-        consoleUpdate(nullptr);
+class AmnhacNxOverlay final : public tsl::Overlay {
+public:
+    void initServices() override {
+        g_sdReady = R_SUCCEEDED(fsOpenSdCardFileSystem(&g_sd));
+        scanMusic();
     }
 
-    consoleExit(nullptr);
-    return 0;
-}
+    void exitServices() override {
+        if (g_sdReady) {
+            fsFsClose(&g_sd);
+            g_sdReady = false;
+        }
+    }
 
-} // namespace amnhacNX
+    std::unique_ptr<tsl::Gui> loadInitialGui() override {
+        return std::make_unique<MainGui>();
+    }
+};
+
+} // namespace
+
+int main(int argc, char** argv) {
+    return tsl::loop<AmnhacNxOverlay>(argc, argv);
+}

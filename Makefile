@@ -1,17 +1,13 @@
-export GITHASH := $(shell git rev-parse --short HEAD)
 export VERSION := 0.1.0
 
-all: overlay sysmodule
+# The sysmodule target is intentionally not built yet: the current sysmodule
+# directory is only a placeholder and does not provide background playback.
+all: overlay
 
 overlay:
 	$(MAKE) -C overlay
 
-sysmodule:
-	$(MAKE) -C sysmodule
-
 clean:
 	$(MAKE) -C overlay clean
-	$(MAKE) -C sysmodule clean
-	-rm -rf dist
 
-.PHONY: all overlay sysmodule clean
+.PHONY: all overlay clean
