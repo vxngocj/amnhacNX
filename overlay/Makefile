@@ -6,25 +6,30 @@ ifeq ($(strip $(DEVKITPRO)),)
 $(error "Please set DEVKITPRO in your environment. export DEVKITPRO=<path to>/devkitpro")
 endif
 
+TESLA_DIR ?= $(CURDIR)/lib
+ifeq ($(wildcard $(TESLA_DIR)/include/tesla.hpp),)
+$(error "libtesla headers not found. Run ../tools/setup_deps.sh or set TESLA_DIR=<libtesla checkout>")
+endif
+
 TOPDIR ?= $(CURDIR)
 include $(DEVKITPRO)/libnx/switch_rules
 
-APP_TITLE := amnhacNX Overlay
+APP_TITLE := amnhacNX
 TARGET := amnhacNX-overlay
 BUILD := build
-SOURCES := source ../common
-INCLUDES := ../common
+SOURCES := source
+INCLUDES := source $(TESLA_DIR)/include
 APP_VERSION := $(VERSION)
 NO_ICON := 1
+NO_NACP := 1
 
 ARCH := -march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
-CFLAGS := -g -Wall -O2 -ffunction-sections $(ARCH) $(DEFINES)
+CFLAGS := -g -Wall -Wextra -O2 -ffunction-sections $(ARCH) $(DEFINES)
 CFLAGS += $(INCLUDE) -DVERSION=\"v$(APP_VERSION)\" -DNDEBUG=1
-CXXFLAGS := $(CFLAGS) -fno-exceptions -std=gnu++17
+CXXFLAGS := $(CFLAGS) -fno-exceptions -std=gnu++23
 ASFLAGS := -g $(ARCH)
 LDFLAGS := -specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 LIBS := -lnx
-
 LIBDIRS := $(PORTLIBS) $(LIBNX)
 
 ifneq ($(BUILD),$(notdir $(CURDIR)))
@@ -42,15 +47,12 @@ export OFILES_BIN := $(addsuffix .o,$(BINFILES))
 export OFILES_SRC := $(CPPFILES:.cpp=.o) $(CFILES:.c=.o) $(SFILES:.s=.o)
 export OFILES := $(OFILES_BIN) $(OFILES_SRC)
 export HFILES_BIN := $(addsuffix .h,$(subst .,_,$(BINFILES)))
-
 export INCLUDE := $(foreach dir,$(INCLUDES),-I$(CURDIR)/$(dir)) \
 		$(foreach dir,$(LIBDIRS),-I$(dir)/include) \
 		-I$(CURDIR)/$(BUILD)
-
 export LIBPATHS := $(foreach dir,$(LIBDIRS),-L$(dir)/lib)
 
 .PHONY: $(BUILD) clean all
-
 all: $(BUILD)
 
 $(BUILD):
@@ -58,14 +60,14 @@ $(BUILD):
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 clean:
-	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).nro $(TARGET).nacp $(TARGET).elf
+	@rm -fr $(BUILD) $(TARGET).ovl $(TARGET).elf
 
 else
 .PHONY: all
 DEPENDS := $(OFILES:.o=.d)
 all: $(OUTPUT).ovl
 
-$(OUTPUT).ovl: $(OUTPUT).elf $(OUTPUT).nacp
+$(OUTPUT).ovl: $(OUTPUT).elf
 	@elf2nro $< $@ $(NROFLAGS)
 	@echo "built ... $(notdir $(OUTPUT).ovl)"
 

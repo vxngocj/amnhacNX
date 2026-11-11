@@ -1,56 +1,60 @@
 # amnhacNX
 
-amnhacNX is a Nintendo Switch homebrew project designed to play local music files from the SD card while you are in games or in the system UI. The project follows the same general direction as sys-tune:
+A Nintendo Switch homebrew music-player project for Atmosphère, inspired by the separation used by projects such as sys-tune: a Tesla overlay for controls and a background audio service for playback.
 
-- background playback support
-- Tesla-style overlay UI
-- SD card music scanning
-- configurable playback and settings
-- English and Vietnamese language options
+## Current status: Tesla overlay prototype
 
-This repo is the initial scaffolding for the application. It is meant to be built with devkitPro/libnx and Atmosphère-based tooling.
+The current build is an **overlay prototype**, not a completed music player. It can open the SD card, scan `/switch/amnhacNX/music` for MP3, FLAC, WAV/WAVE and OGG filenames, show the list in Tesla, and switch the UI language between English and Vietnamese. Selecting a file only marks it in the UI; **audio playback, persistent overlay settings, and the background sysmodule are not implemented yet**. This prototype does not change game volume.
 
-## Features planned
+This distinction is intentional: a Tesla overlay alone cannot keep audio playing after it closes. Background playback needs a real sysmodule/audio backend and IPC, which is a separate implementation step.
 
-- Music scan from /switch/amnhacNX/
-- Playback while in-game
-- Overlay controls (play, pause, next, prev, volume)
-- Settings screen for language and behavior
-- English / Tiếng Việt translations
-- Music and game volume controls
+## Requirements
 
-## Folder structure
+- Nintendo Switch homebrew development environment: devkitPro, libnx, and `switch-dev`.
+- Tesla overlay headers from [libtesla](https://github.com/WerWolv/libtesla).
+- Atmosphère and Tesla/nx-ovlloader on the device to load an `.ovl` file.
 
-- `overlay/` - Tesla overlay UI
-- `sysmodule/` - background audio service / system module skeleton
-- `common/` - shared settings, language data, and utilities
-- `tools/` - helper scripts
+Set `DEVKITPRO` and `DEVKITARM`. Fetch the Tesla headers once:
 
-## Building
+```sh
+./tools/setup_deps.sh
+```
 
-1. Install devkitPro and libnx.
-2. Set `DEVKITPRO` in your environment.
-3. Run:
+Build the overlay:
 
-```bash
+```sh
 make
 ```
 
-4. Package output can be copied into the SD card structure for Atmosphère or overlay loading.
+The output is `overlay/amnhacNX-overlay.ovl`. Building on hardware has not been verified by this repository's CI; see `tools/test.sh` for host-side settings tests.
 
-## SD layout
+## SD card
+
+Create this folder and place your own supported audio files there:
 
 ```text
-/switch/amnhacNX/
-  settings.ini
-  music/
-    song1.mp3
-    song2.flac
-    song3.wav
+/switch/amnhacNX/music/
 ```
 
-## Notes
+The setup helper can prepare it on a mounted SD card, for example:
 
-- This is the foundational skeleton for the project.
-- The actual audio engine and full Tesla UI are intended to be expanded in subsequent commits.
-- Audio behavior while in games depends on the Switch environment and the target Atmosphère version.
+```sh
+./tools/setup_sd.sh /path/to/mounted/sd
+```
+
+## Controls in this prototype
+
+- Use D-pad to move through the Tesla list.
+- A selects a listed track or switches the UI language.
+- The selected filename is displayed in the overlay.
+- The playback entry is explicitly marked unavailable until the background audio service is implemented.
+
+## Planned work
+
+1. Implement a background audio service, audio decoding/output, and a versioned IPC interface.
+2. Connect Tesla overlay controls to that service (play/pause, next/previous, music volume).
+3. Persist English/Vietnamese settings and provide localized settings screens.
+4. Investigate whether separate per-title game-volume control is supported; it is not promised by this prototype.
+5. Package and test on a Switch with a documented Atmosphère/Tesla setup.
+
+Only use audio files you own or are authorized to use.

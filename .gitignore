@@ -1,0 +1,10 @@
+overlay/lib/
+overlay/build/
+overlay/*.ovl
+overlay/*.elf
+overlay/*.map
+sysmodule/build/
+sysmodule/*.nro
+sysmodule/*.nsp
+sysmodule/*.nso
+sysmodule/*.elf

@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
-set -e
+set -euo pipefail
 
-# Minimal helper script used during development.
-# It creates the expected SD folder layout for amnhacNX.
+if [[ $# -ne 1 ]]; then
+    echo "Usage: $0 /path/to/mounted/sd" >&2
+    exit 2
+fi
 
-mkdir -p /switch/amnhacNX/music
-mkdir -p /switch/amnhacNX/config
-
-cat > /switch/amnhacNX/config/settings.ini <<'EOF'
-[general]
+SD_ROOT="$(cd "$1" && pwd)"
+mkdir -p "${SD_ROOT}/switch/amnhacNX/music"
+cat > "${SD_ROOT}/switch/amnhacNX/settings.ini" <<'EOF'
 language = en
 music_volume = 0.80
 game_volume = 0.60
@@ -17,4 +17,4 @@ loop_track = true
 overlay_enabled = true
 EOF
 
-echo "amnhacNX SD folders prepared."
+echo "Prepared ${SD_ROOT}/switch/amnhacNX/music"
